@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Infomeeting Feedback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #FAF7F0;
+    --bg-soft: #F2EDE0;
+    --ink: #1A1F2E;
+    --ink-soft: #5A6072;
+    --line: #E5DFD0;
+    --accent: #2D3654;
+
+    --vg: #1F7A4D;        /* Very Good — dark green */
+    --vg-soft: #D4E8DC;
+    --g:  #6FA84A;        /* Good — light green */
+    --g-soft: #E0EBCE;
+    --p:  #D88438;        /* Poor — warm amber */
+    --p-soft: #F4DFC3;
+    --vp: #B0432D;        /* Very Poor — deep red */
+    --vp-soft: #ECC9C0;
+
+    --shadow: 0 1px 2px rgba(26,31,46,0.04), 0 8px 24px rgba(26,31,46,0.06);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%; width: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+
+  .screen {
+    position: fixed; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5vh 4vw;
+  }
+  .screen.active { display: flex; }
+
+  /* ---------- HOME ---------- */
+  #home .eyebrow {
+    font-family: 'DM Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: clamp(11px, 1.4vw, 14px);
+    color: var(--ink-soft);
+    margin-bottom: 1.5vh;
+    font-weight: 500;
+  }
+  #home h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: clamp(38px, 5.8vw, 76px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-align: center;
+    margin: 0 0 5vh 0;
+    max-width: 18ch;
+  }
+  #home h1 em {
+    font-style: normal;
+    font-weight: 500;
+  }
+
+  .ratings {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(12px, 2vw, 28px);
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .rating-btn {
+    aspect-ratio: 1 / 1.05;
+    border: none;
+    border-radius: 24px;
+    background: var(--bg-soft);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1vh;
+    padding: 2vh 1vw;
+    font-family: inherit;
+    transition: transform 120ms ease, box-shadow 200ms ease, background 200ms ease;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .rating-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--btn-color);
+    opacity: 0.08;
+    transition: opacity 200ms ease;
+  }
+  .rating-btn:hover::before { opacity: 0.14; }
+  .rating-btn:active {
+    transform: scale(0.97);
+  }
+
+  .rating-btn[data-rating="1"] { --btn-color: var(--vp); }
+  .rating-btn[data-rating="2"] { --btn-color: var(--p); }
+  .rating-btn[data-rating="3"] { --btn-color: var(--g); }
+  .rating-btn[data-rating="4"] { --btn-color: var(--vg); }
+
+  .face {
+    width: clamp(70px, 11vw, 140px);
+    height: clamp(70px, 11vw, 140px);
+    border-radius: 50%;
+    background: var(--btn-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+  .face svg { width: 65%; height: 65%; }
+
+  .rating-label {
+    font-size: clamp(14px, 1.8vw, 20px);
+    font-weight: 500;
+    color: var(--ink);
+    position: relative;
+    z-index: 1;
+    letter-spacing: -0.005em;
+  }
+
+  /* admin entry — subtle dot, long-press to activate */
+  #admin-trigger {
+    position: fixed;
+    bottom: 14px; right: 16px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    opacity: 0.25;
+    cursor: pointer;
+    z-index: 10;
+  }
+  #admin-trigger::after {
+    content: '';
+    position: absolute;
+    inset: 11px;
+    border-radius: 50%;
+    background: var(--ink-soft);
+  }
+
+  /* ---------- THANK YOU ---------- */
+  #thanks {
+    background: var(--bg);
+  }
+  #thanks .check-wrap {
+    width: clamp(80px, 10vw, 120px);
+    height: clamp(80px, 10vw, 120px);
+    border-radius: 50%;
+    background: var(--vg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4vh;
+    animation: pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes pop {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+  }
+  #thanks h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: clamp(40px, 5.5vw, 72px);
+    margin: 0 0 1.5vh 0;
+    letter-spacing: -0.02em;
+  }
+  #thanks p {
+    font-size: clamp(16px, 1.6vw, 20px);
+    color: var(--ink-soft);
+    margin: 0;
+    text-align: center;
+    max-width: 32ch;
+    line-height: 1.5;
+  }
+
+  /* QR card lives on home screen, bottom-left, always visible */
+  #home-qr-card {
+    position: fixed;
+    bottom: 22px; left: 22px;
+    background: white;
+    padding: 14px 18px 14px 14px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 340px;
+    z-index: 5;
+  }
+  #home-qr-card #qr canvas, #home-qr-card #qr img {
+    display: block;
+    border-radius: 6px;
+  }
+  .home-qr-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.3;
+  }
+  .home-qr-text strong {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .home-qr-text span {
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* ---------- WINNER ---------- */
+  #winner {
+    background: linear-gradient(145deg, #2D3654 0%, #1A1F2E 100%);
+    overflow: hidden;
+  }
+  .winner-burst {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .winner-burst canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  .winner-card {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+    padding: 4vh 5vw;
+    max-width: 600px;
+    width: 100%;
+    animation: winnerPop 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes winnerPop {
+    0% { transform: scale(0.85); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .winner-trophy {
+    font-size: clamp(52px, 8vw, 90px);
+    line-height: 1;
+    margin-bottom: 1vh;
+    filter: drop-shadow(0 4px 16px rgba(255,200,0,0.5));
+    animation: trophyFloat 2s ease-in-out infinite;
+  }
+  @keyframes trophyFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .winner-eyebrow {
+    font-size: clamp(11px, 1.2vw, 13px);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.55);
+    font-weight: 500;
+    margin-bottom: 0.5vh;
+  }
+  .winner-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: clamp(44px, 7vw, 88px);
+    color: white;
+    margin: 0 0 1.5vh 0;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .winner-body {
+    font-size: clamp(16px, 1.8vw, 22px);
+    color: rgba(255,255,255,0.8);
+    margin: 0 0 3vh 0;
+    line-height: 1.4;
+    max-width: 28ch;
+  }
+  .winner-body strong { color: white; }
+
+  .winner-code-wrap {
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 16px;
+    padding: 14px 36px;
+    margin-bottom: 2.5vh;
+    text-align: center;
+  }
+  .winner-code-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.55);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .winner-code {
+    font-family: 'DM Sans', monospace;
+    font-size: clamp(36px, 5vw, 56px);
+    font-weight: 600;
+    color: white;
+    letter-spacing: 0.22em;
+    line-height: 1;
+  }
+  .winner-claim {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    padding: 18px 24px;
+    display: flex; flex-direction: column; gap: 10px;
+    margin-bottom: 3vh;
+    width: 100%;
+    max-width: 420px;
+  }
+  .winner-claim-step {
+    font-size: clamp(14px, 1.5vw, 17px);
+    color: rgba(255,255,255,0.9);
+    line-height: 1.4;
+    text-align: left;
+  }
+  .winner-claim-step strong { color: white; }
+  .winner-timer-wrap {
+    position: relative;
+    width: clamp(52px, 6vw, 68px);
+    height: clamp(52px, 6vw, 68px);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  .winner-timer-ring {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  #winner-countdown {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(18px, 2.2vw, 26px);
+    font-weight: 500;
+    color: white;
+    position: relative; z-index: 1;
+  }
+  .winner-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* ---------- ADMIN ---------- */
+  #pin {
+    background: var(--bg);
+  }
+  .pin-card {
+    background: white;
+    padding: 40px 48px;
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 380px;
+  }
+  .pin-card h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    margin: 0 0 8px 0;
+    font-size: 28px;
+  }
+  .pin-card .sub {
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .pin-display {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .pin-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--line);
+    transition: background 150ms;
+  }
+  .pin-dot.filled { background: var(--ink); }
+  .pin-dot.error { background: var(--vp); }
+  .pin-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .pin-key {
+    aspect-ratio: 1.6;
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms;
+    color: var(--ink);
+  }
+  .pin-key:active { background: var(--line); }
+  .pin-key.cancel, .pin-key.delete {
+    font-size: 14px;
+    color: var(--ink-soft);
+    background: transparent;
+    border-color: transparent;
+  }
+
+  #admin {
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 32px 40px;
+    overflow-y: auto;
+  }
+  .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 32px;
+  }
+  .admin-header h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 38px;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  .admin-header .meta {
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .btn {
+    border: 1px solid var(--line);
+    background: white;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--ink);
+    transition: background 120ms;
+  }
+  .btn:hover { background: var(--bg-soft); }
+  .btn.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn.danger {
+    color: var(--vp);
+    border-color: var(--ecc9c0, var(--vp-soft));
+  }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .stat {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .stat .label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .stat .value {
+    font-family: 'Fraunces', serif;
+    font-size: 32px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .stat .sub {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  .chart-card, .settings-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  .chart-card h2, .settings-card h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 4px 0;
+  }
+  .chart-card .desc, .settings-card .desc {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+  }
+
+  .chart-wrap { width: 100%; overflow-x: auto; }
+  #chart {
+    display: block;
+    min-width: 600px;
+    width: 100%;
+    height: 320px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .swatch {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+    gap: 16px;
+  }
+  .settings-row:first-of-type { border-top: none; }
+  .settings-row .info { flex: 1; min-width: 0; }
+  .settings-row .info .label {
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .settings-row .info .desc {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 0;
+    word-break: break-all;
+  }
+
+  /* ---------- TOGGLE ---------- */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .toggle {
+    position: relative;
+    width: 44px; height: 26px;
+    flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--line);
+    border-radius: 26px;
+    cursor: pointer;
+    transition: background 200ms;
+  }
+  .toggle input:checked + .toggle-track { background: var(--vg); }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 200ms cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .toggle input:checked + .toggle-track::after { transform: translateX(18px); }
+  .toggle-state {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    min-width: 26px;
+  }
+  .toggle input:checked ~ .toggle-state { color: var(--vg); }
+  /* rows dimmed when lucky draw is off */
+  .lucky-draw-dependent {
+    transition: opacity 200ms;
+  }
+  .lucky-draw-dependent.disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(26,31,46,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.active { display: flex; }
+  .modal {
+    background: white;
+    padding: 28px 32px;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: var(--shadow);
+  }
+  .modal h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    margin: 0 0 14px 0;
+    font-size: 22px;
+  }
+  .modal p { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px 0; line-height: 1.5; }
+  .modal input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+  .modal input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* Toast for save confirmations */
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ink);
+    color: white;
+    padding: 12px 22px;
+    border-radius: 24px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms, transform 200ms;
+    z-index: 200;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ HOME / RATING ============ -->
+<div id="home" class="screen active">
+  <div class="eyebrow">Today's session</div>
+  <h1>How was the <em>infomeeting</em>?</h1>
+
+  <div class="ratings">
+    <!-- Rating 1 — Very Poor -->
+    <button class="rating-btn" data-rating="1" aria-label="Very Poor">
+      <span class="face">
+        <svg viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="26" r="2.5" fill="white" stroke="none"/>
+          <circle cx="42" cy="26" r="2.5" fill="white" stroke="none"/>
+          <path d="M18 46 Q32 32 46 46"/>
+        </svg>
+      </span>
+      <span class="rating-label">Very Poor</span>
+    </button>
+
+    <!-- Rating 2 — Poor -->
+    <button class="rating-btn" data-rating="2" aria-label="Poor">
+      <span class="face">
+        <svg viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="26" r="2.5" fill="white" stroke="none"/>
+          <circle cx="42" cy="26" r="2.5" fill="white" stroke="none"/>
+          <path d="M20 44 Q32 38 44 44"/>
+        </svg>
+      </span>
+      <span class="rating-label">Poor</span>
+    </button>
+
+    <!-- Rating 3 — Good -->
+    <button class="rating-btn" data-rating="3" aria-label="Good">
+      <span class="face">
+        <svg viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="26" r="2.5" fill="white" stroke="none"/>
+          <circle cx="42" cy="26" r="2.5" fill="white" stroke="none"/>
+          <path d="M20 40 Q32 47 44 40"/>
+        </svg>
+      </span>
+      <span class="rating-label">Good</span>
+    </button>
+
+    <!-- Rating 4 — Very Good -->
+    <button class="rating-btn" data-rating="4" aria-label="Very Good">
+      <span class="face">
+        <svg viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="26" r="2.5" fill="white" stroke="none"/>
+          <circle cx="42" cy="26" r="2.5" fill="white" stroke="none"/>
+          <path d="M18 38 Q32 52 46 38"/>
+        </svg>
+      </span>
+      <span class="rating-label">Very Good</span>
+    </button>
+  </div>
+
+  <!-- Always-visible QR for those who want to leave more detailed feedback -->
+  <div id="home-qr-card">
+    <div id="qr"></div>
+    <div class="home-qr-text">
+      <strong>Want to share more?</strong>
+      <span>Scan to leave detailed feedback</span>
+    </div>
+  </div>
+
+  <button id="admin-trigger" aria-label="Admin"></button>
+</div>
+
+<!-- ============ THANK YOU ============ -->
+<div id="thanks" class="screen">
+  <div class="check-wrap">
+    <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="5 12 10 17 19 7"/>
+    </svg>
+  </div>
+  <h1>Thank you</h1>
+  <p>Your feedback helps shape the next infomeeting.</p>
+</div>
+
+<!-- ============ WINNER ============ -->
+<div id="winner" class="screen">
+  <div class="winner-burst" id="winner-burst"></div>
+  <div class="winner-card">
+    <div class="winner-trophy">🏆</div>
+    <div class="winner-eyebrow">Lucky winner</div>
+    <h1 class="winner-title">You've won!</h1>
+    <p class="winner-body">Enjoy a free dessert or coffee at the <strong>Messbar</strong> — on us.</p>
+
+    <div class="winner-code-wrap">
+      <div class="winner-code-label">Your claim code</div>
+      <div class="winner-code" id="winner-code-display">—</div>
+    </div>
+
+    <div class="winner-claim">
+      <div class="winner-claim-step">📸 Take a photo of this screen, <strong>or</strong> note your code</div>
+      <div class="winner-claim-step">📧 Contact <strong id="winner-email-display">the Ambassador Team</strong> to claim your free voucher</div>
+    </div>
+    <div class="winner-timer-wrap">
+      <svg class="winner-timer-ring" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4"/>
+        <circle id="winner-ring-fill" cx="32" cy="32" r="28" fill="none" stroke="white" stroke-width="4"
+          stroke-dasharray="175.9" stroke-dashoffset="0" stroke-linecap="round"
+          transform="rotate(-90 32 32)"/>
+      </svg>
+      <span id="winner-countdown">10</span>
+    </div>
+    <div class="winner-sub">Screen closes automatically</div>
+  </div>
+</div>
+
+<!-- ============ PIN ENTRY ============ -->
+<div id="pin" class="screen">
+  <div class="pin-card">
+    <h2>Admin access</h2>
+    <div class="sub">Enter PIN to view dashboard</div>
+    <div class="pin-display">
+      <div class="pin-dot" data-i="0"></div>
+      <div class="pin-dot" data-i="1"></div>
+      <div class="pin-dot" data-i="2"></div>
+      <div class="pin-dot" data-i="3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" data-key="1">1</button>
+      <button class="pin-key" data-key="2">2</button>
+      <button class="pin-key" data-key="3">3</button>
+      <button class="pin-key" data-key="4">4</button>
+      <button class="pin-key" data-key="5">5</button>
+      <button class="pin-key" data-key="6">6</button>
+      <button class="pin-key" data-key="7">7</button>
+      <button class="pin-key" data-key="8">8</button>
+      <button class="pin-key" data-key="9">9</button>
+      <button class="pin-key cancel" data-key="cancel">Cancel</button>
+      <button class="pin-key" data-key="0">0</button>
+      <button class="pin-key delete" data-key="del">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADMIN DASHBOARD ============ -->
+<div id="admin" class="screen">
+  <div class="admin-header">
+    <div>
+      <h1>Feedback dashboard</h1>
+      <div class="meta" id="admin-meta">—</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="exitAdmin()">Exit</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="chart-card">
+    <h2>Monthly feedback</h2>
+    <div class="desc">Total responses per month, broken down by sentiment. Each tap on the kiosk = one bar segment.</div>
+    <div class="chart-wrap">
+      <svg id="chart" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><span class="swatch" style="background:var(--vg)"></span>Very Good</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--g)"></span>Good</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--p)"></span>Poor</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--vp)"></span>Very Poor</div>
+    </div>
+  </div>
+
+  <div class="settings-card">
+    <h2>Data & settings</h2>
+    <div class="desc">Export to CSV for OneDrive backup or monthly reporting.</div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Export feedback</div>
+        <p class="desc">Downloads all-time feedback as CSV (timestamp, rating, label).</p>
+      </div>
+      <button class="btn primary" onclick="exportCSV()">Download CSV</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Lucky draw</div>
+        <p class="desc">When on, one random attendee per session wins a voucher for the Messbar.</p>
+      </div>
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" id="lucky-draw-toggle" onchange="toggleLuckyDraw(this.checked)">
+          <span class="toggle-track"></span>
+        </label>
+        <span class="toggle-state" id="lucky-draw-state">Off</span>
+      </div>
+    </div>
+
+    <div class="lucky-draw-dependent" id="lucky-draw-dependents">
+      <div class="settings-row">
+        <div class="info">
+          <div class="label">Ambassador Team email</div>
+          <p class="desc" id="ambassador-email-display">—</p>
+        </div>
+        <button class="btn" onclick="changeAmbassadorEmail()">Change</button>
+      </div>
+
+      <div class="settings-row">
+        <div class="info">
+          <div class="label">Reset winner draw</div>
+          <p class="desc">Use before each infomeeting to pick a new random winner position (1–40). Current: <span id="winner-status">—</span></p>
+        </div>
+        <button class="btn" onclick="resetWinner()">Reset for next session</button>
+      </div>
+
+      <div class="settings-row" id="winner-code-row" style="display:none">
+        <div class="info">
+          <div class="label">Winner claim code</div>
+          <p class="desc">Generated <span id="winner-code-date">—</span>. Share with Ambassador Team to verify claims.</p>
+        </div>
+        <div style="font-family:'DM Sans',monospace;font-size:28px;font-weight:600;letter-spacing:0.15em;color:var(--accent)" id="winner-code-admin">—</div>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Feedback link (QR code)</div>
+        <p class="desc" id="qr-url-display">—</p>
+      </div>
+      <button class="btn" onclick="changeQrUrl()">Change</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Admin PIN</div>
+        <p class="desc">4-digit PIN required to access this dashboard.</p>
+      </div>
+      <button class="btn" onclick="changePin()">Change PIN</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Clear all data</div>
+        <p class="desc">Permanently deletes all stored feedback. Export first if you need a record.</p>
+      </div>
+      <button class="btn danger" onclick="confirmClear()">Clear data</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="info">
+        <div class="label">Demo data</div>
+        <p class="desc">Add 6 months of sample data so you can preview the chart.</p>
+      </div>
+      <button class="btn" onclick="addDemoData()">Add demo data</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <p id="modal-text"></p>
+    <input type="text" id="modal-input" style="display:none">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" id="modal-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   Infomeeting Feedback Kiosk
+   - Anonymous sentiment capture (4 levels)
+   - QR code on home screen for those who want to leave details
+   - Hidden admin via 5 taps on corner dot + PIN
+   - Local persistence via localStorage
+   - CSV export for OneDrive backup / monthly reporting
+   ============================================================ */
+
+const LABELS = { 4: 'Very Good', 3: 'Good', 2: 'Poor', 1: 'Very Poor' };
+const COLORS = { 4: 'var(--vg)', 3: 'var(--g)', 2: 'var(--p)', 1: 'var(--vp)' };
+const COLOR_HEX = { 4: '#1F7A4D', 3: '#6FA84A', 2: '#D88438', 1: '#B0432D' };
+
+const DEFAULT_QR_URL = 'https://forms.office.com/REPLACE_WITH_YOUR_FORM_URL';
+const STORE_KEY = 'infomeeting_feedback_v1';
+
+/* -------------- Storage -------------- */
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return defaultStore();
+    const parsed = JSON.parse(raw);
+    return { ...defaultStore(), ...parsed };
+  } catch { return defaultStore(); }
+}
+function defaultStore() {
+  return {
+    feedback: [],
+    pin: '1234',
+    qrUrl: DEFAULT_QR_URL,
+    ambassadorEmail: 'ambassadorteam.reinach.ch.ehds@endress.com',
+    luckyDrawEnabled: true,
+    winnerTarget: pickWinnerTarget(),  // random position 1–40 for this infomeeting
+    winnerDrawn: false,                // reset each infomeeting via admin
+    winnerCode: null,                  // 4-digit code for current winner
+    winnerCodeDate: null               // ISO date the code was generated
+  };
+}
+function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+
+let store = loadStore();
+
+/* -------------- Screen routing -------------- */
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* -------------- Winner logic -------------- */
+function pickWinnerTarget() {
+  return Math.floor(Math.random() * 40) + 1; // 1–40 inclusive
+}
+
+function todayResponseCount() {
+  const today = new Date().toISOString().slice(0, 10);
+  return store.feedback.filter(f => f.timestamp.startsWith(today)).length;
+}
+
+function checkWinner() {
+  if (!store.luckyDrawEnabled) return false;
+  if (store.winnerDrawn) return false;
+  const count = todayResponseCount();
+  return count === store.winnerTarget;
+}
+
+/* -------------- Rating capture -------------- */
+document.querySelectorAll('.rating-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const rating = parseInt(btn.dataset.rating, 10);
+    store.feedback.push({
+      timestamp: new Date().toISOString(),
+      rating: rating,
+      label: LABELS[rating]
+    });
+    saveStore(store);
+
+    if (checkWinner()) {
+      store.winnerDrawn = true;
+      store.winnerCode = String(Math.floor(1000 + Math.random() * 9000)); // 1000–9999
+      store.winnerCodeDate = new Date().toISOString();
+      saveStore(store);
+      showWinner();
+    } else {
+      show('thanks');
+      clearTimeout(window._returnTimer);
+      window._returnTimer = setTimeout(() => show('home'), 1000);
+    }
+  });
+});
+
+/* -------------- Winner screen -------------- */
+let _winnerTimer = null;
+let _confettiFrame = null;
+
+function showWinner() {
+  const emailEl = document.getElementById('winner-email-display');
+  if (emailEl) {
+    emailEl.textContent = store.ambassadorEmail || 'the Ambassador Team';
+  }
+  const codeEl = document.getElementById('winner-code-display');
+  if (codeEl) {
+    codeEl.textContent = store.winnerCode || '????';
+  }
+  show('winner');
+  startConfetti();
+  startWinnerCountdown(10);
+}
+
+function startWinnerCountdown(secs) {
+  clearInterval(_winnerTimer);
+  let remaining = secs;
+  const ring = document.getElementById('winner-ring-fill');
+  const counter = document.getElementById('winner-countdown');
+  const circumference = 175.9;
+
+  function tick() {
+    counter.textContent = remaining;
+    const offset = circumference * (1 - remaining / secs);
+    ring.style.strokeDashoffset = offset;
+    if (remaining <= 0) {
+      clearInterval(_winnerTimer);
+      stopConfetti();
+      show('home');
+    }
+    remaining--;
+  }
+  tick();
+  _winnerTimer = setInterval(tick, 1000);
+}
+
+/* -------------- Confetti -------------- */
+function startConfetti() {
+  const burst = document.getElementById('winner-burst');
+  burst.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  burst.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const COLORS_CONFETTI = ['#FFD700','#FF6B6B','#4ECDC4','#A78BFA','#F9A8D4','#6EE7B7','#FCD34D','#93C5FD'];
+  const pieces = Array.from({ length: 120 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -20 - Math.random() * 200,
+    w: 8 + Math.random() * 8,
+    h: 4 + Math.random() * 4,
+    color: COLORS_CONFETTI[Math.floor(Math.random() * COLORS_CONFETTI.length)],
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.15,
+    vx: (Math.random() - 0.5) * 3,
+    vy: 2 + Math.random() * 4,
+    opacity: 1
+  }));
+
+  let running = true;
+  function draw() {
+    if (!running) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.rotSpeed;
+      if (p.y > canvas.height + 20) {
+        p.y = -20;
+        p.x = Math.random() * canvas.width;
+        p.opacity = 1;
+      }
+      ctx.save();
+      ctx.globalAlpha = p.opacity;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
+    _confettiFrame = requestAnimationFrame(draw);
+  }
+  draw();
+
+  window._stopConfetti = () => {
+    running = false;
+    cancelAnimationFrame(_confettiFrame);
+    burst.innerHTML = '';
+  };
+}
+
+function stopConfetti() {
+  if (window._stopConfetti) window._stopConfetti();
+}
+
+/* -------------- QR code render -------------- */
+let qrInstance = null;
+function renderQR() {
+  const el = document.getElementById('qr');
+  el.innerHTML = '';
+  if (typeof QRCode !== 'undefined') {
+    qrInstance = new QRCode(el, {
+      text: store.qrUrl,
+      width: 100, height: 100,
+      colorDark: '#1A1F2E', colorLight: '#FFFFFF',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else {
+    // graceful fallback if CDN blocked
+    el.innerHTML = '<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;background:var(--bg-soft);border-radius:6px;color:var(--ink-soft);font-size:10px;text-align:center;padding:8px;">Replace with static QR image</div>';
+  }
+}
+window.addEventListener('load', renderQR);
+
+/* -------------- Admin entry: 5 taps on the corner dot within 3 seconds -------------- */
+const trigger = document.getElementById('admin-trigger');
+let tapCount = 0;
+let tapResetTimer = null;
+trigger.addEventListener('click', () => {
+  tapCount++;
+  clearTimeout(tapResetTimer);
+  tapResetTimer = setTimeout(() => { tapCount = 0; }, 3000);
+  if (tapCount >= 5) {
+    tapCount = 0;
+    clearTimeout(tapResetTimer);
+    openPin();
+  }
+});
+
+/* -------------- PIN entry -------------- */
+let pinBuffer = '';
+function openPin() {
+  pinBuffer = '';
+  updatePinDots();
+  show('pin');
+}
+function updatePinDots(error=false) {
+  document.querySelectorAll('.pin-dot').forEach((d, i) => {
+    d.classList.toggle('filled', i < pinBuffer.length);
+    d.classList.toggle('error', error);
+  });
+}
+document.querySelectorAll('.pin-key').forEach(k => {
+  k.addEventListener('click', () => {
+    const key = k.dataset.key;
+    if (key === 'cancel') { show('home'); return; }
+    if (key === 'del')    { pinBuffer = pinBuffer.slice(0, -1); updatePinDots(); return; }
+    if (pinBuffer.length >= 4) return;
+    pinBuffer += key;
+    updatePinDots();
+    if (pinBuffer.length === 4) {
+      setTimeout(() => {
+        if (pinBuffer === store.pin) {
+          pinBuffer = '';
+          openAdmin();
+        } else {
+          updatePinDots(true);
+          setTimeout(() => { pinBuffer = ''; updatePinDots(); }, 600);
+        }
+      }, 120);
+    }
+  });
+});
+
+function toggleLuckyDraw(enabled) {
+  store.luckyDrawEnabled = enabled;
+  saveStore(store);
+  renderAdmin();
+  toast(enabled ? 'Lucky draw enabled' : 'Lucky draw disabled');
+}
+
+function resetWinner() {
+  store.winnerTarget = pickWinnerTarget();
+  store.winnerDrawn = false;
+  store.winnerCode = null;
+  store.winnerCodeDate = null;
+  saveStore(store);
+  renderAdmin();
+  toast('Winner draw reset — new target set for next session');
+}
+
+/* -------------- Admin dashboard -------------- */
+function openAdmin() {
+  renderAdmin();
+  show('admin');
+}
+function exitAdmin() { show('home'); }
+
+function renderAdmin() {
+  const fb = store.feedback;
+  const total = fb.length;
+
+  // Current month stats
+  const now = new Date();
+  const monthKey = monthKeyFor(now);
+  const thisMonth = fb.filter(f => monthKeyFor(new Date(f.timestamp)) === monthKey);
+
+  // Sentiment percentages (this month, fall back to all-time)
+  const source = thisMonth.length ? thisMonth : fb;
+  const positive = source.filter(f => f.rating >= 3).length;
+  const positivePct = source.length ? Math.round(100 * positive / source.length) : 0;
+
+  // Last month for comparison
+  const lastMonthDate = new Date(now); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonth = fb.filter(f => monthKeyFor(new Date(f.timestamp)) === monthKeyFor(lastMonthDate));
+
+  document.getElementById('admin-meta').textContent =
+    `${total.toLocaleString()} total responses · ${monthName(now)} ${now.getFullYear()}`;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat">
+      <div class="label">This month</div>
+      <div class="value">${thisMonth.length}</div>
+      <div class="sub">${lastMonth.length} last month</div>
+    </div>
+    <div class="stat">
+      <div class="label">Positive sentiment</div>
+      <div class="value">${positivePct}%</div>
+      <div class="sub">${thisMonth.length ? 'this month' : 'all time'}</div>
+    </div>
+    <div class="stat">
+      <div class="label">All-time responses</div>
+      <div class="value">${total.toLocaleString()}</div>
+      <div class="sub">${monthsCovered()} months tracked</div>
+    </div>
+  `;
+
+  document.getElementById('qr-url-display').textContent = store.qrUrl;
+
+  const emailDisplay = document.getElementById('ambassador-email-display');
+  if (emailDisplay) {
+    emailDisplay.textContent = store.ambassadorEmail || 'Not set yet';
+  }
+
+  // Lucky draw toggle
+  const toggle = document.getElementById('lucky-draw-toggle');
+  const toggleState = document.getElementById('lucky-draw-state');
+  const dependents = document.getElementById('lucky-draw-dependents');
+  if (toggle) {
+    toggle.checked = store.luckyDrawEnabled;
+    toggleState.textContent = store.luckyDrawEnabled ? 'On' : 'Off';
+    dependents.classList.toggle('disabled', !store.luckyDrawEnabled);
+  }
+
+  const winnerEl = document.getElementById('winner-status');
+  if (winnerEl) {
+    winnerEl.textContent = store.winnerDrawn
+      ? `Winner already drawn this session`
+      : `Waiting for response #${store.winnerTarget}`;
+  }
+
+  // Winner code row — only visible after a winner has been drawn
+  const codeRow = document.getElementById('winner-code-row');
+  const codeAdmin = document.getElementById('winner-code-admin');
+  const codeDate = document.getElementById('winner-code-date');
+  if (codeRow) {
+    codeRow.style.display = store.winnerCode ? 'flex' : 'none';
+    if (store.winnerCode) {
+      codeAdmin.textContent = store.winnerCode;
+      codeDate.textContent = store.winnerCodeDate
+        ? new Date(store.winnerCodeDate).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
+    }
+  }
+
+  drawChart();
+}
+
+function monthKeyFor(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function monthName(d) {
+  return d.toLocaleDateString('en-US', { month: 'long' });
+}
+function monthsCovered() {
+  const keys = new Set(store.feedback.map(f => monthKeyFor(new Date(f.timestamp))));
+  return keys.size;
+}
+
+/* -------------- Chart (pure SVG, stacked bars) -------------- */
+function drawChart() {
+  const svg = document.getElementById('chart');
+  const W = svg.clientWidth || 800;
+  const H = 320;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  // Group feedback by month, last 6 months ending at current month
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key: monthKeyFor(d),
+      label: d.toLocaleDateString('en-US', { month: 'short' }),
+      year: d.getFullYear(),
+      counts: { 4:0, 3:0, 2:0, 1:0 },
+      total: 0
+    });
+  }
+  store.feedback.forEach(f => {
+    const k = monthKeyFor(new Date(f.timestamp));
+    const m = months.find(x => x.key === k);
+    if (m) { m.counts[f.rating]++; m.total++; }
+  });
+
+  // Scales
+  const padL = 44, padR = 16, padT = 16, padB = 36;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const maxVal = Math.max(10, ...months.map(m => m.total));
+  // round up to nice number
+  const niceMax = niceCeil(maxVal);
+  const barGap = 0.28;
+  const barWidth = innerW / months.length * (1 - barGap);
+  const stepX = innerW / months.length;
+
+  // Y gridlines
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const y = padT + innerH * (1 - i/ticks);
+    const val = Math.round(niceMax * i / ticks);
+    svg.insertAdjacentHTML('beforeend',
+      `<line x1="${padL}" x2="${W - padR}" y1="${y}" y2="${y}" stroke="#E5DFD0" stroke-width="1"/>`);
+    svg.insertAdjacentHTML('beforeend',
+      `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#5A6072" font-family="DM Sans">${val}</text>`);
+  }
+
+  // Bars (stacked: very poor at bottom, very good at top — reads low→high)
+  months.forEach((m, i) => {
+    const x = padL + i * stepX + (stepX - barWidth) / 2;
+    let yCursor = padT + innerH; // bottom
+    [1, 2, 3, 4].forEach(rating => {
+      const c = m.counts[rating];
+      if (!c) return;
+      const h = (c / niceMax) * innerH;
+      yCursor -= h;
+      svg.insertAdjacentHTML('beforeend',
+        `<rect x="${x}" y="${yCursor}" width="${barWidth}" height="${h}"
+               fill="${COLOR_HEX[rating]}" rx="2">
+           <title>${m.label} ${m.year} · ${LABELS[rating]}: ${c}</title>
+         </rect>`);
+    });
+    // Total label above bar
+    if (m.total > 0) {
+      const topY = padT + innerH - (m.total / niceMax) * innerH;
+      svg.insertAdjacentHTML('beforeend',
+        `<text x="${x + barWidth/2}" y="${topY - 6}" text-anchor="middle"
+               font-size="12" font-weight="500" fill="#1A1F2E" font-family="DM Sans">${m.total}</text>`);
+    }
+    // X-axis label
+    svg.insertAdjacentHTML('beforeend',
+      `<text x="${x + barWidth/2}" y="${H - 12}" text-anchor="middle"
+             font-size="12" fill="#5A6072" font-family="DM Sans">${m.label}</text>`);
+  });
+}
+
+function niceCeil(n) {
+  if (n <= 10) return 10;
+  const exp = Math.pow(10, Math.floor(Math.log10(n)));
+  const f = n / exp;
+  let nf;
+  if (f <= 1) nf = 1;
+  else if (f <= 2) nf = 2;
+  else if (f <= 5) nf = 5;
+  else nf = 10;
+  return nf * exp;
+}
+
+/* -------------- CSV export -------------- */
+function exportCSV() {
+  const rows = [['timestamp_iso', 'rating', 'rating_label']];
+  store.feedback.forEach(f => {
+    rows.push([f.timestamp, f.rating, f.label]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `infomeeting_feedback_${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('CSV downloaded');
+}
+
+/* -------------- Settings actions -------------- */
+function changeAmbassadorEmail() {
+  promptModal({
+    title: 'Ambassador Team email',
+    text: 'This address is shown on the winner screen so participants know where to send their photo.',
+    placeholder: 'ambassadors@yourcompany.com',
+    initial: store.ambassadorEmail || '',
+    validate: v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : 'Please enter a valid email address.'
+  }, val => {
+    store.ambassadorEmail = val.trim();
+    saveStore(store);
+    renderAdmin();
+    toast('Ambassador email updated');
+  });
+}
+
+function changePin() {
+  promptModal({
+    title: 'Change admin PIN',
+    text: 'Enter a new 4-digit PIN.',
+    placeholder: 'e.g. 8421',
+    validate: v => /^\d{4}$/.test(v) ? null : 'PIN must be exactly 4 digits.'
+  }, val => {
+    store.pin = val;
+    saveStore(store);
+    toast('PIN updated');
+  });
+}
+
+function changeQrUrl() {
+  promptModal({
+    title: 'Feedback form URL',
+    text: 'Paste the link to your Microsoft Form (or any feedback page). The QR code will regenerate automatically.',
+    placeholder: 'https://forms.office.com/...',
+    initial: store.qrUrl,
+    validate: v => /^https?:\/\//i.test(v) ? null : 'Must start with http:// or https://'
+  }, val => {
+    store.qrUrl = val;
+    saveStore(store);
+    renderQR();
+    renderAdmin();
+    toast('QR link updated');
+  });
+}
+
+function confirmClear() {
+  promptModal({
+    title: 'Clear all feedback?',
+    text: 'This permanently deletes every stored response. Export the CSV first if you need a record. Type CLEAR to confirm.',
+    placeholder: 'CLEAR',
+    validate: v => v === 'CLEAR' ? null : 'Type CLEAR exactly to confirm.'
+  }, () => {
+    store.feedback = [];
+    saveStore(store);
+    renderAdmin();
+    toast('All feedback cleared');
+  });
+}
+
+function addDemoData() {
+  const now = new Date();
+  // Generate 6 months of plausible data
+  const counts = [42, 38, 51, 47, 55, 49];
+  for (let i = 5; i >= 0; i--) {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const total = counts[5 - i];
+    // Distribution: 35% VG, 40% G, 18% P, 7% VP (with some noise)
+    const dist = {
+      4: Math.round(total * (0.30 + Math.random()*0.10)),
+      3: Math.round(total * (0.35 + Math.random()*0.10)),
+      2: Math.round(total * (0.12 + Math.random()*0.08)),
+      1: 0
+    };
+    dist[1] = Math.max(0, total - dist[4] - dist[3] - dist[2]);
+    Object.entries(dist).forEach(([rating, n]) => {
+      const r = parseInt(rating, 10);
+      for (let k = 0; k < n; k++) {
+        const day = 1 + Math.floor(Math.random() * 27);
+        const ts = new Date(monthDate.getFullYear(), monthDate.getMonth(), day,
+                            10 + Math.floor(Math.random()*3),
+                            Math.floor(Math.random()*60));
+        store.feedback.push({ timestamp: ts.toISOString(), rating: r, label: LABELS[r] });
+      }
+    });
+  }
+  saveStore(store);
+  renderAdmin();
+  toast('Demo data added');
+}
+
+/* -------------- Modal helper -------------- */
+function promptModal({ title, text, placeholder='', initial='', validate }, onConfirm) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-text').textContent = text;
+  const input = document.getElementById('modal-input');
+  input.style.display = 'block';
+  input.value = initial;
+  input.placeholder = placeholder;
+  document.getElementById('modal-bg').classList.add('active');
+  setTimeout(() => input.focus(), 50);
+
+  const confirmBtn = document.getElementById('modal-confirm');
+  const newBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+  newBtn.addEventListener('click', () => {
+    const err = validate ? validate(input.value) : null;
+    if (err) { toast(err); return; }
+    closeModal();
+    onConfirm(input.value);
+  });
+}
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('active');
+  document.getElementById('modal-input').style.display = 'none';
+}
+
+/* -------------- Toast -------------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* -------------- Misc -------------- */
+// Re-render chart on resize when admin visible
+window.addEventListener('resize', () => {
+  if (document.getElementById('admin').classList.contains('active')) drawChart();
+});
+
+// Prevent right-click context menu (kiosk hardening)
+window.addEventListener('contextmenu', e => e.preventDefault());
+</script>
+</body>
+</html>
