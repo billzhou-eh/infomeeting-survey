@@ -164,6 +164,42 @@
     background: var(--ink-soft);
   }
 
+  /* ---------- HOME STATS ---------- */
+  .draw-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 40px;
+    padding: 8px 18px;
+    font-size: clamp(12px, 1.3vw, 15px);
+    color: var(--ink-soft);
+    margin-bottom: 3vh;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .draw-pill .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--vg);
+    flex-shrink: 0;
+    animation: pillPulse 2s ease-in-out infinite;
+  }
+  .draw-pill.won .dot { background: #FFD700; animation: none; }
+  @keyframes pillPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.45; transform: scale(0.7); }
+  }
+  .today-count {
+    margin-top: 3vh;
+    font-size: clamp(12px, 1.2vw, 14px);
+    color: var(--ink-soft);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+
   /* ---------- THANK YOU ---------- */
   #thanks {
     background: var(--bg);
@@ -198,6 +234,61 @@
     text-align: center;
     max-width: 32ch;
     line-height: 1.5;
+  }
+  .thanks-milestone {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #1A1F2E;
+    border-radius: 40px;
+    padding: 9px 22px;
+    font-size: clamp(13px, 1.3vw, 15px);
+    font-weight: 600;
+    margin-bottom: 2.5vh;
+    letter-spacing: 0.01em;
+    animation: pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .thanks-your-rating {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2.5vh;
+    font-size: clamp(14px, 1.4vw, 16px);
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .thanks-mood {
+    margin-top: 2vh;
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+  }
+  .thanks-mood-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .thanks-mood-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--line);
+    gap: 2px;
+  }
+  .thanks-mood-bar div {
+    height: 100%;
+    transition: width 700ms cubic-bezier(0.34, 1.2, 0.64, 1);
+  }
+  .thanks-mood-legend {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 7px;
+    font-size: 11px;
+    color: var(--ink-soft);
   }
 
   /* QR card lives on home screen, bottom-left, always visible */
@@ -680,6 +771,8 @@
   <div class="eyebrow">Today's session</div>
   <h1>How was the <em>infomeeting</em>?</h1>
 
+  <div class="draw-pill" id="draw-pill" style="display:none"></div>
+
   <div class="ratings">
     <!-- Rating 1 — Very Poor -->
     <button class="rating-btn" data-rating="1" aria-label="Very Poor">
@@ -730,6 +823,8 @@
     </button>
   </div>
 
+  <div class="today-count" id="today-count"></div>
+
   <!-- Always-visible QR for those who want to leave more detailed feedback -->
   <div id="home-qr-card">
     <div id="qr"></div>
@@ -744,6 +839,7 @@
 
 <!-- ============ THANK YOU ============ -->
 <div id="thanks" class="screen">
+  <div class="thanks-milestone" id="thanks-milestone" style="display:none"></div>
   <div class="check-wrap">
     <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="5 12 10 17 19 7"/>
@@ -751,6 +847,8 @@
   </div>
   <h1>Thank you</h1>
   <p>Your feedback helps shape the next infomeeting.</p>
+  <div class="thanks-your-rating" id="thanks-your-rating"></div>
+  <div class="thanks-mood" id="thanks-mood" style="display:none"></div>
 </div>
 
 <!-- ============ WINNER ============ -->
@@ -1002,6 +1100,93 @@ async function initWinnerTarget() {
   store.winnerTargetHash = await sha256(salt + ':' + target);
 }
 
+/* -------------- Home stats -------------- */
+function updateHomeStats() {
+  const pill = document.getElementById('draw-pill');
+  if (pill) {
+    if (store.luckyDrawEnabled) {
+      if (store.winnerDrawn) {
+        pill.className = 'draw-pill won';
+        pill.innerHTML = '<span class="dot"></span>🏆 Today\'s winner has been drawn!';
+      } else {
+        pill.className = 'draw-pill';
+        pill.innerHTML = '<span class="dot"></span>🎁 One lucky responder wins a Messbar voucher today';
+      }
+      pill.style.display = 'inline-flex';
+    } else {
+      pill.style.display = 'none';
+    }
+  }
+
+  const countEl = document.getElementById('today-count');
+  if (countEl) {
+    const n = todayResponseCount();
+    countEl.textContent = n === 0
+      ? 'Be the first to share your thoughts today'
+      : n === 1
+        ? '1 person has shared their thoughts today'
+        : `${n.toLocaleString()} people have shared their thoughts today`;
+  }
+}
+
+/* -------------- Milestone detection -------------- */
+function getMilestone(count) {
+  // Milestones within a single session (typical meeting: ~40–50 attendees)
+  if ([10, 25, 50].includes(count)) return count;
+  return null;
+}
+
+/* -------------- Thanks screen renderer -------------- */
+function renderThanks(rating, milestone) {
+  // Milestone badge
+  const milestoneEl = document.getElementById('thanks-milestone');
+  if (milestoneEl) {
+    if (milestone) {
+      milestoneEl.textContent = `🎉 You're the ${milestone}th person to share their thoughts today!`;
+      milestoneEl.style.display = 'block';
+    } else {
+      milestoneEl.style.display = 'none';
+    }
+  }
+
+  // Chosen rating
+  const ratingEl = document.getElementById('thanks-your-rating');
+  if (ratingEl) {
+    ratingEl.innerHTML =
+      `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLOR_HEX[rating]};flex-shrink:0"></span>` +
+      `You said: <strong style="color:var(--ink)">${LABELS[rating]}</strong>`;
+  }
+
+  // Today's mood bar
+  const today   = new Date().toISOString().slice(0, 10);
+  const todayFb = store.feedback.filter(f => !f.isDemo && f.timestamp.startsWith(today));
+  const total   = todayFb.length;
+  const moodEl  = document.getElementById('thanks-mood');
+  if (moodEl && total > 0) {
+    const counts = { 4: 0, 3: 0, 2: 0, 1: 0 };
+    todayFb.forEach(f => { counts[f.rating]++; });
+
+    const segments = [4, 3, 2, 1].map(r => {
+      const pct = (counts[r] / total) * 100;
+      return pct > 0
+        ? `<div style="width:${pct}%;background:${COLOR_HEX[r]}"></div>`
+        : '';
+    }).join('');
+
+    const legend = [4, 3, 2, 1].filter(r => counts[r] > 0).map(r =>
+      `<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${COLOR_HEX[r]};margin-right:3px;vertical-align:middle"></i>${counts[r]} ${LABELS[r]}</span>`
+    ).join('');
+
+    moodEl.innerHTML =
+      `<div class="thanks-mood-label">Today's mood so far</div>` +
+      `<div class="thanks-mood-bar">${segments}</div>` +
+      `<div class="thanks-mood-legend">${legend}</div>`;
+    moodEl.style.display = 'block';
+  } else if (moodEl) {
+    moodEl.style.display = 'none';
+  }
+}
+
 /* -------------- One-time migration from v1 plain-text fields -------------- */
 async function migrateStore() {
   let changed = false;
@@ -1041,6 +1226,7 @@ migrateStore();
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  if (id === 'home') updateHomeStats();
 }
 
 /* -------------- Winner logic -------------- */
@@ -1077,9 +1263,12 @@ document.querySelectorAll('.rating-btn').forEach(btn => {
       saveStore(store);
       showWinner();
     } else {
+      const todayCount = todayResponseCount();
+      const milestone  = getMilestone(todayCount);
+      renderThanks(rating, milestone);
       show('thanks');
       clearTimeout(window._returnTimer);
-      window._returnTimer = setTimeout(() => show('home'), 1000);
+      window._returnTimer = setTimeout(() => show('home'), milestone ? 3500 : 2500);
     }
   });
 });
@@ -1189,7 +1378,7 @@ function renderQR() {
     el.innerHTML = '<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;background:var(--bg-soft);border-radius:6px;color:var(--ink-soft);font-size:10px;text-align:center;padding:8px;">Replace with static QR image</div>';
   }
 }
-window.addEventListener('load', renderQR);
+window.addEventListener('load', () => { renderQR(); updateHomeStats(); });
 
 /* -------------- Admin entry: 5 taps on the corner dot within 3 seconds -------------- */
 const trigger = document.getElementById('admin-trigger');
