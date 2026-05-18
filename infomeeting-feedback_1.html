@@ -832,13 +832,13 @@
   </div>
 
   <div class="settings-card">
-    <h2>Data & settings</h2>
+    <h2>Data &amp; settings</h2>
     <div class="desc">Export to CSV for OneDrive backup or monthly reporting.</div>
 
     <div class="settings-row">
       <div class="info">
         <div class="label">Export feedback</div>
-        <p class="desc">Downloads all-time feedback as CSV (timestamp, rating, label).</p>
+        <p class="desc">Downloads all-time feedback as CSV (timestamp, rating, label). Demo entries are excluded.</p>
       </div>
       <button class="btn primary" onclick="exportCSV()">Download CSV</button>
     </div>
@@ -910,7 +910,7 @@
     <div class="settings-row">
       <div class="info">
         <div class="label">Demo data</div>
-        <p class="desc">Add 6 months of sample data so you can preview the chart.</p>
+        <p class="desc">Add 6 months of sample data so you can preview the chart. Demo entries are flagged and excluded from real stats and CSV exports.</p>
       </div>
       <button class="btn" onclick="addDemoData()">Add demo data</button>
     </div>
@@ -934,20 +934,36 @@
 
 <script>
 /* ============================================================
-   Infomeeting Feedback Kiosk
+   Infomeeting Feedback Kiosk  (v2 — security hardened)
    - Anonymous sentiment capture (4 levels)
    - QR code on home screen for those who want to leave details
    - Hidden admin via 5 taps on corner dot + PIN
    - Local persistence via localStorage
    - CSV export for OneDrive backup / monthly reporting
+
+   Security changes vs v1:
+   - Admin PIN stored as SHA-256 hash (never plain text)
+   - Lucky-draw target stored as sha256(salt:position) — raw position never in storage
+   - Ambassador email removed from source code — set via admin panel
+   - Winner screen auto-returns to home after 45 s
+   - Demo data flagged with isDemo:true and excluded from real stats / CSV
    ============================================================ */
 
-const LABELS = { 4: 'Very Good', 3: 'Good', 2: 'Poor', 1: 'Very Poor' };
-const COLORS = { 4: 'var(--vg)', 3: 'var(--g)', 2: 'var(--p)', 1: 'var(--vp)' };
+const LABELS    = { 4: 'Very Good', 3: 'Good', 2: 'Poor', 1: 'Very Poor' };
+const COLORS    = { 4: 'var(--vg)', 3: 'var(--g)', 2: 'var(--p)', 1: 'var(--vp)' };
 const COLOR_HEX = { 4: '#1F7A4D', 3: '#6FA84A', 2: '#D88438', 1: '#B0432D' };
 
 const DEFAULT_QR_URL = 'https://forms.office.com/REPLACE_WITH_YOUR_FORM_URL';
-const STORE_KEY = 'infomeeting_feedback_v1';
+const STORE_KEY      = 'infomeeting_feedback_v1';
+
+// sha256('1234') — the default PIN is always stored hashed, never in plain text
+const DEFAULT_PIN_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';
+
+/* -------------- SHA-256 via WebCrypto -------------- */
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 /* -------------- Storage -------------- */
 function loadStore() {
@@ -958,22 +974,68 @@ function loadStore() {
     return { ...defaultStore(), ...parsed };
   } catch { return defaultStore(); }
 }
+
 function defaultStore() {
   return {
-    feedback: [],
-    pin: '1234',
-    qrUrl: DEFAULT_QR_URL,
-    ambassadorEmail: 'ambassadorteam.reinach.ch.ehds@endress.com',
+    feedback:        [],
+    pinHash:         DEFAULT_PIN_HASH, // SHA-256 hash — raw PIN never stored
+    qrUrl:           DEFAULT_QR_URL,
+    ambassadorEmail: '',               // set via admin panel on first use — not hardcoded here
     luckyDrawEnabled: true,
-    winnerTarget: pickWinnerTarget(),  // random position 1–40 for this infomeeting
-    winnerDrawn: false,                // reset each infomeeting via admin
-    winnerCode: null,                  // 4-digit code for current winner
-    winnerCodeDate: null               // ISO date the code was generated
+    winnerSalt:       null,            // random UUID generated per session
+    winnerTargetHash: null,            // sha256(salt + ':' + position) — position never stored
+    winnerDrawn:      false,
+    winnerCode:       null,
+    winnerCodeDate:   null
   };
 }
+
 function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
 let store = loadStore();
+
+/* -------------- Winner-target initialisation -------------- */
+async function initWinnerTarget() {
+  const target = Math.floor(Math.random() * 40) + 1; // 1–40 inclusive
+  const salt   = crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+  store.winnerSalt       = salt;
+  store.winnerTargetHash = await sha256(salt + ':' + target);
+}
+
+/* -------------- One-time migration from v1 plain-text fields -------------- */
+async function migrateStore() {
+  let changed = false;
+
+  // Migrate plain-text pin → pinHash
+  if (store.pin !== undefined) {
+    store.pinHash = /^\d{4}$/.test(store.pin)
+      ? await sha256(store.pin)
+      : store.pin; // already a hash from a previous partial migration
+    delete store.pin;
+    changed = true;
+  }
+
+  // Migrate plain winnerTarget integer → salted hash
+  if (store.winnerTarget !== undefined) {
+    const rawTarget = store.winnerTarget;
+    const salt      = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    store.winnerSalt       = salt;
+    store.winnerTargetHash = await sha256(salt + ':' + rawTarget);
+    delete store.winnerTarget;
+    changed = true;
+  }
+
+  // First run (or after data-clear): create a fresh winner target
+  if (!store.winnerSalt || !store.winnerTargetHash) {
+    await initWinnerTarget();
+    changed = true;
+  }
+
+  if (changed) saveStore(store);
+}
+
+// Runs immediately on page load; completes long before any user interaction
+migrateStore();
 
 /* -------------- Screen routing -------------- */
 function show(id) {
@@ -982,36 +1044,35 @@ function show(id) {
 }
 
 /* -------------- Winner logic -------------- */
-function pickWinnerTarget() {
-  return Math.floor(Math.random() * 40) + 1; // 1–40 inclusive
-}
-
 function todayResponseCount() {
   const today = new Date().toISOString().slice(0, 10);
-  return store.feedback.filter(f => f.timestamp.startsWith(today)).length;
+  // Demo entries do not count toward the lucky-draw trigger
+  return store.feedback.filter(f => !f.isDemo && f.timestamp.startsWith(today)).length;
 }
 
-function checkWinner() {
-  if (!store.luckyDrawEnabled) return false;
-  if (store.winnerDrawn) return false;
+async function checkWinner() {
+  if (!store.luckyDrawEnabled)           return false;
+  if (store.winnerDrawn)                 return false;
+  if (!store.winnerSalt || !store.winnerTargetHash) return false;
   const count = todayResponseCount();
-  return count === store.winnerTarget;
+  const hash  = await sha256(store.winnerSalt + ':' + count);
+  return hash === store.winnerTargetHash;
 }
 
 /* -------------- Rating capture -------------- */
 document.querySelectorAll('.rating-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const rating = parseInt(btn.dataset.rating, 10);
     store.feedback.push({
       timestamp: new Date().toISOString(),
-      rating: rating,
-      label: LABELS[rating]
+      rating:    rating,
+      label:     LABELS[rating]
     });
     saveStore(store);
 
-    if (checkWinner()) {
-      store.winnerDrawn = true;
-      store.winnerCode = String(Math.floor(1000 + Math.random() * 9000)); // 1000–9999
+    if (await checkWinner()) {
+      store.winnerDrawn    = true;
+      store.winnerCode     = String(Math.floor(1000 + Math.random() * 9000)); // 1000–9999
       store.winnerCodeDate = new Date().toISOString();
       saveStore(store);
       showWinner();
@@ -1028,18 +1089,18 @@ let _confettiFrame = null;
 
 function showWinner() {
   const emailEl = document.getElementById('winner-email-display');
-  if (emailEl) {
-    emailEl.textContent = store.ambassadorEmail || 'the Ambassador Team';
-  }
+  if (emailEl) emailEl.textContent = store.ambassadorEmail || 'the Ambassador Team';
   const codeEl = document.getElementById('winner-code-display');
-  if (codeEl) {
-    codeEl.textContent = store.winnerCode || '????';
-  }
+  if (codeEl)  codeEl.textContent  = store.winnerCode || '????';
   show('winner');
   startConfetti();
+  // Auto-return to home if winner does not acknowledge within 45 seconds
+  clearTimeout(window._winnerTimer);
+  window._winnerTimer = setTimeout(() => { stopConfetti(); show('home'); }, 45000);
 }
 
 function acknowledgeWinner() {
+  clearTimeout(window._winnerTimer);
   stopConfetti();
   show('home');
 }
@@ -1053,7 +1114,7 @@ function startConfetti() {
   const ctx = canvas.getContext('2d');
 
   function resize() {
-    canvas.width = window.innerWidth;
+    canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
   }
   resize();
@@ -1061,16 +1122,16 @@ function startConfetti() {
 
   const COLORS_CONFETTI = ['#FFD700','#FF6B6B','#4ECDC4','#A78BFA','#F9A8D4','#6EE7B7','#FCD34D','#93C5FD'];
   const pieces = Array.from({ length: 120 }, () => ({
-    x: Math.random() * canvas.width,
-    y: -20 - Math.random() * 200,
-    w: 8 + Math.random() * 8,
-    h: 4 + Math.random() * 4,
-    color: COLORS_CONFETTI[Math.floor(Math.random() * COLORS_CONFETTI.length)],
-    rot: Math.random() * Math.PI * 2,
+    x:        Math.random() * canvas.width,
+    y:        -20 - Math.random() * 200,
+    w:        8 + Math.random() * 8,
+    h:        4 + Math.random() * 4,
+    color:    COLORS_CONFETTI[Math.floor(Math.random() * COLORS_CONFETTI.length)],
+    rot:      Math.random() * Math.PI * 2,
     rotSpeed: (Math.random() - 0.5) * 0.15,
-    vx: (Math.random() - 0.5) * 3,
-    vy: 2 + Math.random() * 4,
-    opacity: 1
+    vx:       (Math.random() - 0.5) * 3,
+    vy:       2 + Math.random() * 4,
+    opacity:  1
   }));
 
   let running = true;
@@ -1116,9 +1177,11 @@ function renderQR() {
   el.innerHTML = '';
   if (typeof QRCode !== 'undefined') {
     qrInstance = new QRCode(el, {
-      text: store.qrUrl,
-      width: 100, height: 100,
-      colorDark: '#1A1F2E', colorLight: '#FFFFFF',
+      text:         store.qrUrl,
+      width:        100,
+      height:       100,
+      colorDark:    '#1A1F2E',
+      colorLight:   '#FFFFFF',
       correctLevel: QRCode.CorrectLevel.M
     });
   } else {
@@ -1145,17 +1208,20 @@ trigger.addEventListener('click', () => {
 
 /* -------------- PIN entry -------------- */
 let pinBuffer = '';
+
 function openPin() {
   pinBuffer = '';
   updatePinDots();
   show('pin');
 }
-function updatePinDots(error=false) {
+
+function updatePinDots(error = false) {
   document.querySelectorAll('.pin-dot').forEach((d, i) => {
     d.classList.toggle('filled', i < pinBuffer.length);
     d.classList.toggle('error', error);
   });
 }
+
 document.querySelectorAll('.pin-key').forEach(k => {
   k.addEventListener('click', () => {
     const key = k.dataset.key;
@@ -1165,8 +1231,9 @@ document.querySelectorAll('.pin-key').forEach(k => {
     pinBuffer += key;
     updatePinDots();
     if (pinBuffer.length === 4) {
-      setTimeout(() => {
-        if (pinBuffer === store.pin) {
+      setTimeout(async () => {
+        const hash = await sha256(pinBuffer);
+        if (hash === store.pinHash) {
           pinBuffer = '';
           openAdmin();
         } else {
@@ -1185,10 +1252,10 @@ function toggleLuckyDraw(enabled) {
   toast(enabled ? 'Lucky draw enabled' : 'Lucky draw disabled');
 }
 
-function resetWinner() {
-  store.winnerTarget = pickWinnerTarget();
-  store.winnerDrawn = false;
-  store.winnerCode = null;
+async function resetWinner() {
+  await initWinnerTarget();
+  store.winnerDrawn    = false;
+  store.winnerCode     = null;
   store.winnerCodeDate = null;
   saveStore(store);
   renderAdmin();
@@ -1200,24 +1267,24 @@ function openAdmin() {
   renderAdmin();
   show('admin');
 }
+
 function exitAdmin() { show('home'); }
 
 function renderAdmin() {
-  const fb = store.feedback;
+  // Exclude demo entries from all real-data metrics
+  const fb    = store.feedback.filter(f => !f.isDemo);
   const total = fb.length;
 
-  // Current month stats
-  const now = new Date();
-  const monthKey = monthKeyFor(now);
+  const now       = new Date();
+  const monthKey  = monthKeyFor(now);
   const thisMonth = fb.filter(f => monthKeyFor(new Date(f.timestamp)) === monthKey);
 
-  // Sentiment percentages (this month, fall back to all-time)
-  const source = thisMonth.length ? thisMonth : fb;
-  const positive = source.filter(f => f.rating >= 3).length;
+  const source      = thisMonth.length ? thisMonth : fb;
+  const positive    = source.filter(f => f.rating >= 3).length;
   const positivePct = source.length ? Math.round(100 * positive / source.length) : 0;
 
-  // Last month for comparison
-  const lastMonthDate = new Date(now); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthDate = new Date(now);
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
   const lastMonth = fb.filter(f => monthKeyFor(new Date(f.timestamp)) === monthKeyFor(lastMonthDate));
 
   document.getElementById('admin-meta').textContent =
@@ -1245,13 +1312,12 @@ function renderAdmin() {
 
   const emailDisplay = document.getElementById('ambassador-email-display');
   if (emailDisplay) {
-    emailDisplay.textContent = store.ambassadorEmail || 'Not set yet';
+    emailDisplay.textContent = store.ambassadorEmail || 'Not set — tap Change to configure';
   }
 
-  // Lucky draw toggle
-  const toggle = document.getElementById('lucky-draw-toggle');
+  const toggle      = document.getElementById('lucky-draw-toggle');
   const toggleState = document.getElementById('lucky-draw-state');
-  const dependents = document.getElementById('lucky-draw-dependents');
+  const dependents  = document.getElementById('lucky-draw-dependents');
   if (toggle) {
     toggle.checked = store.luckyDrawEnabled;
     toggleState.textContent = store.luckyDrawEnabled ? 'On' : 'Off';
@@ -1261,19 +1327,18 @@ function renderAdmin() {
   const winnerEl = document.getElementById('winner-status');
   if (winnerEl) {
     winnerEl.textContent = store.winnerDrawn
-      ? `Winner already drawn this session`
-      : `Waiting for response #${store.winnerTarget}`;
+      ? 'Winner already drawn this session'
+      : 'Waiting — position hidden for draw integrity';
   }
 
-  // Winner code row — only visible after a winner has been drawn
-  const codeRow = document.getElementById('winner-code-row');
+  const codeRow   = document.getElementById('winner-code-row');
   const codeAdmin = document.getElementById('winner-code-admin');
-  const codeDate = document.getElementById('winner-code-date');
+  const codeDate  = document.getElementById('winner-code-date');
   if (codeRow) {
     codeRow.style.display = store.winnerCode ? 'flex' : 'none';
     if (store.winnerCode) {
       codeAdmin.textContent = store.winnerCode;
-      codeDate.textContent = store.winnerCodeDate
+      codeDate.textContent  = store.winnerCodeDate
         ? new Date(store.winnerCodeDate).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
         : '—';
     }
@@ -1283,58 +1348,58 @@ function renderAdmin() {
 }
 
 function monthKeyFor(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 function monthName(d) {
   return d.toLocaleDateString('en-US', { month: 'long' });
 }
 function monthsCovered() {
-  const keys = new Set(store.feedback.map(f => monthKeyFor(new Date(f.timestamp))));
+  const keys = new Set(
+    store.feedback.filter(f => !f.isDemo).map(f => monthKeyFor(new Date(f.timestamp)))
+  );
   return keys.size;
 }
 
 /* -------------- Chart (pure SVG, stacked bars) -------------- */
 function drawChart() {
   const svg = document.getElementById('chart');
-  const W = svg.clientWidth || 800;
-  const H = 320;
+  const W   = svg.clientWidth || 800;
+  const H   = 320;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = '';
 
-  // Group feedback by month, last 6 months ending at current month
-  const now = new Date();
+  const now    = new Date();
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     months.push({
-      key: monthKeyFor(d),
-      label: d.toLocaleDateString('en-US', { month: 'short' }),
-      year: d.getFullYear(),
-      counts: { 4:0, 3:0, 2:0, 1:0 },
-      total: 0
+      key:    monthKeyFor(d),
+      label:  d.toLocaleDateString('en-US', { month: 'short' }),
+      year:   d.getFullYear(),
+      counts: { 4: 0, 3: 0, 2: 0, 1: 0 },
+      total:  0
     });
   }
-  store.feedback.forEach(f => {
+
+  // Only real (non-demo) feedback appears in the chart
+  store.feedback.filter(f => !f.isDemo).forEach(f => {
     const k = monthKeyFor(new Date(f.timestamp));
     const m = months.find(x => x.key === k);
     if (m) { m.counts[f.rating]++; m.total++; }
   });
 
-  // Scales
   const padL = 44, padR = 16, padT = 16, padB = 36;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-  const maxVal = Math.max(10, ...months.map(m => m.total));
-  // round up to nice number
-  const niceMax = niceCeil(maxVal);
-  const barGap = 0.28;
+  const innerW   = W - padL - padR;
+  const innerH   = H - padT - padB;
+  const maxVal   = Math.max(10, ...months.map(m => m.total));
+  const niceMax  = niceCeil(maxVal);
+  const barGap   = 0.28;
   const barWidth = innerW / months.length * (1 - barGap);
-  const stepX = innerW / months.length;
+  const stepX    = innerW / months.length;
 
-  // Y gridlines
   const ticks = 4;
   for (let i = 0; i <= ticks; i++) {
-    const y = padT + innerH * (1 - i/ticks);
+    const y   = padT + innerH * (1 - i / ticks);
     const val = Math.round(niceMax * i / ticks);
     svg.insertAdjacentHTML('beforeend',
       `<line x1="${padL}" x2="${W - padR}" y1="${y}" y2="${y}" stroke="#E5DFD0" stroke-width="1"/>`);
@@ -1342,10 +1407,9 @@ function drawChart() {
       `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#5A6072" font-family="DM Sans">${val}</text>`);
   }
 
-  // Bars (stacked: very poor at bottom, very good at top — reads low→high)
   months.forEach((m, i) => {
     const x = padL + i * stepX + (stepX - barWidth) / 2;
-    let yCursor = padT + innerH; // bottom
+    let yCursor = padT + innerH;
     [1, 2, 3, 4].forEach(rating => {
       const c = m.counts[rating];
       if (!c) return;
@@ -1357,16 +1421,14 @@ function drawChart() {
            <title>${m.label} ${m.year} · ${LABELS[rating]}: ${c}</title>
          </rect>`);
     });
-    // Total label above bar
     if (m.total > 0) {
       const topY = padT + innerH - (m.total / niceMax) * innerH;
       svg.insertAdjacentHTML('beforeend',
-        `<text x="${x + barWidth/2}" y="${topY - 6}" text-anchor="middle"
+        `<text x="${x + barWidth / 2}" y="${topY - 6}" text-anchor="middle"
                font-size="12" font-weight="500" fill="#1A1F2E" font-family="DM Sans">${m.total}</text>`);
     }
-    // X-axis label
     svg.insertAdjacentHTML('beforeend',
-      `<text x="${x + barWidth/2}" y="${H - 12}" text-anchor="middle"
+      `<text x="${x + barWidth / 2}" y="${H - 12}" text-anchor="middle"
              font-size="12" fill="#5A6072" font-family="DM Sans">${m.label}</text>`);
   });
 }
@@ -1374,27 +1436,28 @@ function drawChart() {
 function niceCeil(n) {
   if (n <= 10) return 10;
   const exp = Math.pow(10, Math.floor(Math.log10(n)));
-  const f = n / exp;
+  const f   = n / exp;
   let nf;
-  if (f <= 1) nf = 1;
+  if (f <= 1)      nf = 1;
   else if (f <= 2) nf = 2;
   else if (f <= 5) nf = 5;
-  else nf = 10;
+  else             nf = 10;
   return nf * exp;
 }
 
 /* -------------- CSV export -------------- */
 function exportCSV() {
   const rows = [['timestamp_iso', 'rating', 'rating_label']];
-  store.feedback.forEach(f => {
+  // Demo entries are excluded from the export
+  store.feedback.filter(f => !f.isDemo).forEach(f => {
     rows.push([f.timestamp, f.rating, f.label]);
   });
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0,10);
-  a.href = url;
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+  a.href     = url;
   a.download = `infomeeting_feedback_${today}.csv`;
   document.body.appendChild(a);
   a.click();
@@ -1406,11 +1469,11 @@ function exportCSV() {
 /* -------------- Settings actions -------------- */
 function changeAmbassadorEmail() {
   promptModal({
-    title: 'Ambassador Team email',
-    text: 'This address is shown on the winner screen so participants know where to send their photo.',
+    title:       'Ambassador Team email',
+    text:        'This address is shown on the winner screen so participants know where to send their photo.',
     placeholder: 'ambassadors@yourcompany.com',
-    initial: store.ambassadorEmail || '',
-    validate: v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : 'Please enter a valid email address.'
+    initial:     store.ambassadorEmail || '',
+    validate:    v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : 'Please enter a valid email address.'
   }, val => {
     store.ambassadorEmail = val.trim();
     saveStore(store);
@@ -1421,12 +1484,13 @@ function changeAmbassadorEmail() {
 
 function changePin() {
   promptModal({
-    title: 'Change admin PIN',
-    text: 'Enter a new 4-digit PIN.',
+    title:       'Change admin PIN',
+    text:        'Enter a new 4-digit PIN.',
     placeholder: 'e.g. 8421',
-    validate: v => /^\d{4}$/.test(v) ? null : 'PIN must be exactly 4 digits.'
-  }, val => {
-    store.pin = val;
+    validate:    v => /^\d{4}$/.test(v) ? null : 'PIN must be exactly 4 digits.'
+  }, async val => {
+    store.pinHash = await sha256(val);
+    delete store.pin; // remove any legacy plain-text field
     saveStore(store);
     toast('PIN updated');
   });
@@ -1434,11 +1498,11 @@ function changePin() {
 
 function changeQrUrl() {
   promptModal({
-    title: 'Feedback form URL',
-    text: 'Paste the link to your Microsoft Form (or any feedback page). The QR code will regenerate automatically.',
+    title:       'Feedback form URL',
+    text:        'Paste the link to your Microsoft Form (or any feedback page). The QR code will regenerate automatically.',
     placeholder: 'https://forms.office.com/...',
-    initial: store.qrUrl,
-    validate: v => /^https?:\/\//i.test(v) ? null : 'Must start with http:// or https://'
+    initial:     store.qrUrl,
+    validate:    v => /^https?:\/\//i.test(v) ? null : 'Must start with http:// or https://'
   }, val => {
     store.qrUrl = val;
     saveStore(store);
@@ -1450,12 +1514,17 @@ function changeQrUrl() {
 
 function confirmClear() {
   promptModal({
-    title: 'Clear all feedback?',
-    text: 'This permanently deletes every stored response. Export the CSV first if you need a record. Type CLEAR to confirm.',
+    title:       'Clear all feedback?',
+    text:        'This permanently deletes every stored response. Export the CSV first if you need a record. Type CLEAR to confirm.',
     placeholder: 'CLEAR',
-    validate: v => v === 'CLEAR' ? null : 'Type CLEAR exactly to confirm.'
-  }, () => {
+    validate:    v => v === 'CLEAR' ? null : 'Type CLEAR exactly to confirm.'
+  }, async () => {
     store.feedback = [];
+    // Re-initialize winner target so the draw is fresh after a clear
+    await initWinnerTarget();
+    store.winnerDrawn    = false;
+    store.winnerCode     = null;
+    store.winnerCodeDate = null;
     saveStore(store);
     renderAdmin();
     toast('All feedback cleared');
@@ -1463,17 +1532,15 @@ function confirmClear() {
 }
 
 function addDemoData() {
-  const now = new Date();
-  // Generate 6 months of plausible data
+  const now    = new Date();
   const counts = [42, 38, 51, 47, 55, 49];
   for (let i = 5; i >= 0; i--) {
     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const total = counts[5 - i];
-    // Distribution: 35% VG, 40% G, 18% P, 7% VP (with some noise)
+    const total     = counts[5 - i];
     const dist = {
-      4: Math.round(total * (0.30 + Math.random()*0.10)),
-      3: Math.round(total * (0.35 + Math.random()*0.10)),
-      2: Math.round(total * (0.12 + Math.random()*0.08)),
+      4: Math.round(total * (0.30 + Math.random() * 0.10)),
+      3: Math.round(total * (0.35 + Math.random() * 0.10)),
+      2: Math.round(total * (0.12 + Math.random() * 0.08)),
       1: 0
     };
     dist[1] = Math.max(0, total - dist[4] - dist[3] - dist[2]);
@@ -1481,10 +1548,16 @@ function addDemoData() {
       const r = parseInt(rating, 10);
       for (let k = 0; k < n; k++) {
         const day = 1 + Math.floor(Math.random() * 27);
-        const ts = new Date(monthDate.getFullYear(), monthDate.getMonth(), day,
-                            10 + Math.floor(Math.random()*3),
-                            Math.floor(Math.random()*60));
-        store.feedback.push({ timestamp: ts.toISOString(), rating: r, label: LABELS[r] });
+        const ts  = new Date(
+          monthDate.getFullYear(), monthDate.getMonth(), day,
+          10 + Math.floor(Math.random() * 3), Math.floor(Math.random() * 60)
+        );
+        store.feedback.push({
+          timestamp: ts.toISOString(),
+          rating:    r,
+          label:     LABELS[r],
+          isDemo:    true // flagged — excluded from stats, chart, and CSV exports
+        });
       }
     });
   }
@@ -1494,18 +1567,18 @@ function addDemoData() {
 }
 
 /* -------------- Modal helper -------------- */
-function promptModal({ title, text, placeholder='', initial='', validate }, onConfirm) {
+function promptModal({ title, text, placeholder = '', initial = '', validate }, onConfirm) {
   document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-text').textContent = text;
+  document.getElementById('modal-text').textContent  = text;
   const input = document.getElementById('modal-input');
   input.style.display = 'block';
-  input.value = initial;
-  input.placeholder = placeholder;
+  input.value         = initial;
+  input.placeholder   = placeholder;
   document.getElementById('modal-bg').classList.add('active');
   setTimeout(() => input.focus(), 50);
 
   const confirmBtn = document.getElementById('modal-confirm');
-  const newBtn = confirmBtn.cloneNode(true);
+  const newBtn     = confirmBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
   newBtn.addEventListener('click', () => {
     const err = validate ? validate(input.value) : null;
@@ -1514,6 +1587,7 @@ function promptModal({ title, text, placeholder='', initial='', validate }, onCo
     onConfirm(input.value);
   });
 }
+
 function closeModal() {
   document.getElementById('modal-bg').classList.remove('active');
   document.getElementById('modal-input').style.display = 'none';
@@ -1529,7 +1603,6 @@ function toast(msg) {
 }
 
 /* -------------- Misc -------------- */
-// Re-render chart on resize when admin visible
 window.addEventListener('resize', () => {
   if (document.getElementById('admin').classList.contains('active')) drawChart();
 });
